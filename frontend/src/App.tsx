@@ -3,6 +3,7 @@ import { Search, Trash2, Plus, Pencil, AlertTriangle, Download, Clock, Database,
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
+import { Checkbox } from "@/components/ui/checkbox"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/simple-dialog"
 import { Header } from "@/components/layout/Header"
 import { Footer } from "@/components/layout/Footer"
@@ -37,6 +38,26 @@ function App() {
   // Delete Confirmation State
   const [isDeleteOpen, setIsDeleteOpen] = useState(false)
   const [deleteTargetId, setDeleteTargetId] = useState<number | null>(null)
+
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
+  const [isBatchDeleteOpen, setIsBatchDeleteOpen] = useState(false)
+
+  const toggleSelect = (id: number) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  const clearSelection = () => setSelectedIds(new Set())
+
+  const handleBatchDelete = () => {
+    setRepos(repos.filter(r => !selectedIds.has(r.id)))
+    setSelectedIds(new Set())
+    setIsBatchDeleteOpen(false)
+  }
 
   // Mobile Detection
   const [isMobile, setIsMobile] = useState(false)
@@ -88,6 +109,27 @@ function App() {
     ? filteredRepos.slice(0, visibleCount)
     : filteredRepos.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage)
 
+  const isAllSelected = displayRepos.length > 0 && displayRepos.every(r => selectedIds.has(r.id))
+  const isSomeSelected = !isAllSelected && displayRepos.some(r => selectedIds.has(r.id))
+  const currentPageSelectedCount = displayRepos.filter(r => selectedIds.has(r.id)).length
+  const otherPageSelectedCount = selectedIds.size - currentPageSelectedCount
+  const filteredOutSelectedCount = selectedIds.size - filteredRepos.filter(r => selectedIds.has(r.id)).length
+
+  const toggleSelectAll = () => {
+    if (isAllSelected) {
+      setSelectedIds(prev => {
+        const next = new Set(prev)
+        displayRepos.forEach(r => next.delete(r.id))
+        return next
+      })
+    } else {
+      setSelectedIds(prev => {
+        const next = new Set(prev)
+        displayRepos.forEach(r => next.add(r.id))
+        return next
+      })
+    }
+  }
 
   // Intersection Observer for Infinite Scroll
   useEffect(() => {
@@ -126,6 +168,11 @@ function App() {
   const confirmDelete = () => {
     if (deleteTargetId !== null) {
       setRepos(repos.filter(r => r.id !== deleteTargetId))
+      setSelectedIds(prev => {
+        const next = new Set(prev)
+        next.delete(deleteTargetId)
+        return next
+      })
       setIsDeleteOpen(false)
       setDeleteTargetId(null)
     }
@@ -228,10 +275,66 @@ function App() {
           </Button>
         </div>
 
+        {selectedIds.size > 0 && (
+          <div className="mb-6 flex items-center justify-between bg-blue-50/80 backdrop-blur-sm p-4 rounded-2xl border border-blue-200/60 shadow-sm animate-in fade-in slide-in-from-top-2 duration-200">
+            <div className="flex items-center gap-3 flex-wrap">
+              <Checkbox
+                checked={isAllSelected ? true : isSomeSelected ? "indeterminate" : false}
+                onCheckedChange={toggleSelectAll}
+                className="data-[state=checked]:bg-blue-600 data-[state=checked]:border-blue-600 data-[state=indeterminate]:bg-blue-600 data-[state=indeterminate]:border-blue-600"
+              />
+              <span className="text-sm font-medium text-blue-700">
+                已选择 <span className="text-blue-900 font-bold">{selectedIds.size}</span> 个镜像
+              </span>
+              {filteredOutSelectedCount > 0 && (
+                <span className="text-xs text-amber-600 bg-amber-50 px-2 py-0.5 rounded border border-amber-200/60">
+                  {filteredOutSelectedCount} 个已选不在筛选结果中
+                </span>
+              )}
+              {filteredOutSelectedCount === 0 && otherPageSelectedCount > 0 && (
+                <span className="text-xs text-blue-500 bg-blue-100/60 px-2 py-0.5 rounded">
+                  其中 {otherPageSelectedCount} 个不在当前页
+                </span>
+              )}
+              <button
+                onClick={clearSelection}
+                className="text-xs text-blue-500 hover:text-blue-700 transition-colors underline underline-offset-2"
+              >
+                取消选择
+              </button>
+            </div>
+            <Button
+              variant="destructive"
+              size="sm"
+              className="gap-2 shadow-md hover:shadow-lg transition-all"
+              onClick={() => setIsBatchDeleteOpen(true)}
+            >
+              <Trash2 className="h-4 w-4" /> 批量删除
+            </Button>
+          </div>
+        )}
+
+        {selectedIds.size === 0 && displayRepos.length > 0 && (
+          <div className="mb-6 flex items-center gap-3 text-sm text-slate-500">
+            <Checkbox
+              checked={isAllSelected}
+              onCheckedChange={toggleSelectAll}
+            />
+            <span>全选当前页</span>
+          </div>
+        )}
+
         {/* Grid */}
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {displayRepos.map((repo) => (
-            <Card key={repo.id} className="group relative hover:shadow-[0_4px_20px_-4px_rgba(0,0,0,0.1)] transition-all duration-300 border-slate-200/60 hover:border-[#1677ff]/30 hover:-translate-y-1 overflow-hidden bg-white">
+            <Card key={repo.id} className={`group relative hover:shadow-[0_4px_20px_-4px_rgba(0,0,0,0.1)] transition-all duration-300 border-slate-200/60 hover:border-[#1677ff]/30 overflow-hidden bg-white ${selectedIds.has(repo.id) ? "ring-2 ring-blue-500/40 border-blue-500/40 -translate-y-1 shadow-[0_4px_20px_-4px_rgba(0,0,0,0.1)]" : ""}`}>
+              <div className="absolute top-3 left-3 z-10">
+                <Checkbox
+                  checked={selectedIds.has(repo.id)}
+                  onCheckedChange={() => toggleSelect(repo.id)}
+                  className="data-[state=checked]:bg-blue-600 data-[state=checked]:border-blue-600 h-4 w-4"
+                />
+              </div>
               {/* Top accent line - thinner and cleaner like antd */}
               <div className={`absolute top-0 left-0 w-full h-[2px] opacity-0 group-hover:opacity-100 transition-opacity bg-gradient-to-r ${getGradient(repo.name).replace('/20', '')}`} />
               
@@ -481,6 +584,34 @@ function App() {
             </AlertDialogCancel>
             <AlertDialogAction 
               onClick={confirmDelete} 
+              className={`bg-destructive text-destructive-foreground hover:bg-destructive/90 ${isMobile ? "w-full h-11 text-base rounded-xl" : ""}`}
+            >
+              确认删除
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Batch Delete Confirmation Dialog */}
+      <AlertDialog open={isBatchDeleteOpen} onOpenChange={setIsBatchDeleteOpen}>
+        <AlertDialogContent className={isMobile ? "rounded-2xl" : ""}>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-center text-xl">
+              确认批量删除
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-center text-base mt-2">
+              您确定要删除选中的 <span className="font-bold text-destructive">{selectedIds.size}</span> 个镜像吗？<br/>此操作无法撤销。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className={isMobile ? "gap-3" : ""}>
+            <AlertDialogCancel
+              onClick={() => setIsBatchDeleteOpen(false)}
+              className={isMobile ? "w-full h-11 text-base rounded-xl border-0 bg-slate-100 text-slate-900" : ""}
+            >
+              取消
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleBatchDelete}
               className={`bg-destructive text-destructive-foreground hover:bg-destructive/90 ${isMobile ? "w-full h-11 text-base rounded-xl" : ""}`}
             >
               确认删除
