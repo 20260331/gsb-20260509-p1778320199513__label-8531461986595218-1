@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react"
-import { Search, Trash2, Plus, Pencil, AlertTriangle, Download, Clock, Database, HardDrive, LayoutGrid, ChevronLeft, ChevronRight, Loader2 } from "lucide-react"
+import { Search, Trash2, Plus, Pencil, AlertTriangle, Download, Clock, Database, HardDrive, LayoutGrid, ChevronLeft, ChevronRight, Loader2, Check } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
@@ -25,6 +25,7 @@ import {
 } from "@/components/ui/select"
 import { INITIAL_REPOS } from "@/data/mock"
 import type { Repo } from "@/data/mock"
+import { cn } from "@/lib/utils"
 
 function App() {
   const [searchTerm, setSearchTerm] = useState("")
@@ -37,6 +38,44 @@ function App() {
   // Delete Confirmation State
   const [isDeleteOpen, setIsDeleteOpen] = useState(false)
   const [deleteTargetId, setDeleteTargetId] = useState<number | null>(null)
+
+  // Batch Selection State
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
+  const [isBatchDeleteOpen, setIsBatchDeleteOpen] = useState(false)
+
+  const toggleSelect = (id: number) => {
+    const newSelected = new Set(selectedIds)
+    if (newSelected.has(id)) {
+      newSelected.delete(id)
+    } else {
+      newSelected.add(id)
+    }
+    setSelectedIds(newSelected)
+  }
+
+  const toggleSelectAll = () => {
+    if (selectedIds.size === filteredRepos.length) {
+      setSelectedIds(new Set())
+    } else {
+      setSelectedIds(new Set(filteredRepos.map(r => r.id)))
+    }
+  }
+
+  const clearSelection = () => {
+    setSelectedIds(new Set())
+  }
+
+  const handleBatchDeleteClick = () => {
+    if (selectedIds.size > 0) {
+      setIsBatchDeleteOpen(true)
+    }
+  }
+
+  const confirmBatchDelete = () => {
+    setRepos(repos.filter(r => !selectedIds.has(r.id)))
+    setSelectedIds(new Set())
+    setIsBatchDeleteOpen(false)
+  }
 
   // Mobile Detection
   const [isMobile, setIsMobile] = useState(false)
@@ -68,6 +107,19 @@ function App() {
     repo.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
     repo.tag.toLowerCase().includes(searchTerm.toLowerCase())
   )
+
+  useEffect(() => {
+    const validIds = new Set(filteredRepos.map(r => r.id))
+    setSelectedIds(prev => {
+      const newSelected = new Set(prev)
+      newSelected.forEach(id => {
+        if (!validIds.has(id)) {
+          newSelected.delete(id)
+        }
+      })
+      return newSelected
+    })
+  }, [searchTerm, repos])
 
   const totalPages = Math.ceil(filteredRepos.length / itemsPerPage)
 
@@ -126,6 +178,11 @@ function App() {
   const confirmDelete = () => {
     if (deleteTargetId !== null) {
       setRepos(repos.filter(r => r.id !== deleteTargetId))
+      setSelectedIds(prev => {
+        const newSelected = new Set(prev)
+        newSelected.delete(deleteTargetId)
+        return newSelected
+      })
       setIsDeleteOpen(false)
       setDeleteTargetId(null)
     }
@@ -213,54 +270,142 @@ function App() {
         </div>
 
         {/* Search and Add Button */}
-        <div className="mb-8 flex flex-col sm:flex-row gap-4 items-center justify-between bg-white/50 backdrop-blur-sm p-4 rounded-2xl border border-slate-200/60 shadow-sm">
-          <div className="relative w-full sm:max-w-md group">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground group-focus-within:text-primary transition-colors" />
-            <Input 
-              placeholder="搜索镜像名称或标签..." 
-              className="pl-9 w-full bg-white border-slate-200 focus-visible:ring-blue-500/30 transition-all shadow-sm"
-              value={searchTerm}
-              onChange={handleSearch}
-            />
+        <div className="mb-8 flex flex-col gap-4">
+          <div className="flex flex-col sm:flex-row gap-4 items-center justify-between bg-white/50 backdrop-blur-sm p-4 rounded-2xl border border-slate-200/60 shadow-sm">
+            <div className="relative w-full sm:max-w-md group">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground group-focus-within:text-primary transition-colors" />
+              <Input 
+                placeholder="搜索镜像名称或标签..." 
+                className="pl-9 w-full bg-white border-slate-200 focus-visible:ring-blue-500/30 transition-all shadow-sm"
+                value={searchTerm}
+                onChange={handleSearch}
+              />
+            </div>
+            <Button onClick={handleAddNew} className="gap-2 w-full sm:w-auto shadow-md hover:shadow-lg hover:shadow-primary/20 transition-all bg-gradient-to-r from-primary to-blue-600 border-0">
+              <Plus className="h-4 w-4" /> 新增镜像
+            </Button>
           </div>
-          <Button onClick={handleAddNew} className="gap-2 w-full sm:w-auto shadow-md hover:shadow-lg hover:shadow-primary/20 transition-all bg-gradient-to-r from-primary to-blue-600 border-0">
-            <Plus className="h-4 w-4" /> 新增镜像
-          </Button>
+
+          {/* Batch Selection Toolbar */}
+          {filteredRepos.length > 0 && (
+            <div className="flex items-center justify-between bg-blue-50 border border-blue-200 px-4 py-3 rounded-xl">
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={toggleSelectAll}
+                  className="flex items-center gap-2 text-sm font-medium text-slate-700 hover:text-blue-600 transition-colors"
+                >
+                  <div className={cn(
+                    "w-5 h-5 rounded border-2 flex items-center justify-center transition-all",
+                    selectedIds.size === filteredRepos.length
+                      ? "bg-blue-600 border-blue-600"
+                      : selectedIds.size > 0
+                      ? "bg-white border-blue-600"
+                      : "bg-white border-slate-300"
+                  )}>
+                    {selectedIds.size === filteredRepos.length && (
+                      <Check className="h-3.5 w-3.5 text-white" />
+                    )}
+                    {selectedIds.size > 0 && selectedIds.size < filteredRepos.length && (
+                      <div className="w-2.5 h-0.5 bg-blue-600 rounded-full" />
+                    )}
+                  </div>
+                  <span>
+                    {selectedIds.size === filteredRepos.length
+                      ? "取消全选"
+                      : "全选当前筛选结果"}
+                  </span>
+                </button>
+                {selectedIds.size > 0 && (
+                  <span className="text-sm text-slate-500">
+                    已选择 <span className="font-semibold text-blue-600">{selectedIds.size}</span> 个镜像
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                {selectedIds.size > 0 && (
+                  <>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={clearSelection}
+                      className="border-slate-300 text-slate-600 hover:bg-slate-100"
+                    >
+                      取消选择
+                    </Button>
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      onClick={handleBatchDeleteClick}
+                      className="gap-1.5"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                      批量删除
+                    </Button>
+                  </>
+                )}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Grid */}
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          {displayRepos.map((repo) => (
-            <Card key={repo.id} className="group relative hover:shadow-[0_4px_20px_-4px_rgba(0,0,0,0.1)] transition-all duration-300 border-slate-200/60 hover:border-[#1677ff]/30 hover:-translate-y-1 overflow-hidden bg-white">
-              {/* Top accent line - thinner and cleaner like antd */}
-              <div className={`absolute top-0 left-0 w-full h-[2px] opacity-0 group-hover:opacity-100 transition-opacity bg-gradient-to-r ${getGradient(repo.name).replace('/20', '')}`} />
-              
-              <CardHeader className="p-6 pb-4">
-                <div className="flex justify-between items-start">
-                  <div className="space-y-3 w-full">
-                    <div className="flex items-start justify-between w-full">
-                      <CardTitle className="text-[18px] font-medium text-[#000000e0] flex items-center gap-3 group-hover:text-[#1677ff] transition-colors">
-                        <div className={`p-2 rounded bg-slate-50 ${getIconColor(repo.name)}`}>
-                          <Database className="h-5 w-5" />
+          {displayRepos.map((repo) => {
+            const isSelected = selectedIds.has(repo.id)
+            return (
+              <Card key={repo.id} className={cn(
+                "group relative hover:shadow-[0_4px_20px_-4px_rgba(0,0,0,0.1)] transition-all duration-300 border hover:-translate-y-1 overflow-hidden bg-white",
+                isSelected
+                  ? "border-blue-500 ring-2 ring-blue-500/20 shadow-[0_4px_20px_-4px_rgba(59,130,246,0.3)]"
+                  : "border-slate-200/60 hover:border-[#1677ff]/30"
+              )}>
+                {/* Top accent line - thinner and cleaner like antd */}
+                <div className={`absolute top-0 left-0 w-full h-[2px] opacity-0 group-hover:opacity-100 transition-opacity bg-gradient-to-r ${getGradient(repo.name).replace('/20', '')}`} />
+                
+                {/* Checkbox */}
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    toggleSelect(repo.id)
+                  }}
+                  className="absolute top-3 left-3 z-10 w-5 h-5 rounded border-2 flex items-center justify-center transition-all"
+                  style={{
+                    backgroundColor: isSelected ? '#2563eb' : '#ffffff',
+                    borderColor: isSelected ? '#2563eb' : '#cbd5e1'
+                  }}
+                >
+                  {isSelected && <Check className="h-3.5 w-3.5 text-white" />}
+                </button>
+                
+                <CardHeader className="p-6 pb-4">
+                  <div className="flex justify-between items-start">
+                    <div className="space-y-3 w-full">
+                      <div className="flex items-start justify-between w-full">
+                        <CardTitle className="text-[18px] font-medium text-[#000000e0] flex items-center gap-3 group-hover:text-[#1677ff] transition-colors">
+                          <div className={cn(
+                            "p-2 rounded",
+                            isSelected ? "bg-blue-100 text-blue-600" : `bg-slate-50 ${getIconColor(repo.name)}`
+                          )}>
+                            <Database className="h-5 w-5" />
+                          </div>
+                          {repo.name}
+                        </CardTitle>
+                        
+                        {/* Dynamic Badge - Antd Tag style */}
+                        <div className={`
+                          text-[13px] px-2.5 py-0.5 rounded-[4px] border flex items-center gap-1
+                          ${repo.tag === 'latest' 
+                            ? 'bg-[#e6f7ff] text-[#1890ff] border-[#91d5ff]' 
+                            : repo.tag.includes('alpine') 
+                              ? 'bg-[#f6ffed] text-[#52c41a] border-[#b7eb8f]'
+                              : 'bg-[#fafafa] text-[#000000d9] border-[#d9d9d9]'}
+                        `}>
+                          {repo.tag}
                         </div>
-                        {repo.name}
-                      </CardTitle>
-                      
-                      {/* Dynamic Badge - Antd Tag style */}
-                      <div className={`
-                        text-[13px] px-2.5 py-0.5 rounded-[4px] border flex items-center gap-1
-                        ${repo.tag === 'latest' 
-                          ? 'bg-[#e6f7ff] text-[#1890ff] border-[#91d5ff]' 
-                          : repo.tag.includes('alpine') 
-                            ? 'bg-[#f6ffed] text-[#52c41a] border-[#b7eb8f]'
-                            : 'bg-[#fafafa] text-[#000000d9] border-[#d9d9d9]'}
-                      `}>
-                        {repo.tag}
                       </div>
                     </div>
                   </div>
-                </div>
-              </CardHeader>
+                </CardHeader>
               
               <CardContent className="p-6 pt-0">
                 <div className="grid grid-cols-2 gap-4 text-[15px] mt-2">
@@ -302,7 +447,8 @@ function App() {
                 </button>
               </CardFooter>
             </Card>
-          ))}
+            )
+          })}
         </div>
 
         {/* Mobile Loading Sentinel */}
@@ -481,6 +627,34 @@ function App() {
             </AlertDialogCancel>
             <AlertDialogAction 
               onClick={confirmDelete} 
+              className={`bg-destructive text-destructive-foreground hover:bg-destructive/90 ${isMobile ? "w-full h-11 text-base rounded-xl" : ""}`}
+            >
+              确认删除
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Batch Delete Confirmation Dialog */}
+      <AlertDialog open={isBatchDeleteOpen} onOpenChange={setIsBatchDeleteOpen}>
+        <AlertDialogContent className={isMobile ? "rounded-2xl" : ""}>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-center text-xl">
+              确认批量删除
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-center text-base mt-2">
+              您确定要永久删除选中的 <span className="font-semibold text-destructive">{selectedIds.size}</span> 个镜像吗？<br/>此操作无法撤销。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className={isMobile ? "gap-3" : ""}>
+            <AlertDialogCancel 
+              onClick={() => setIsBatchDeleteOpen(false)}
+              className={isMobile ? "w-full h-11 text-base rounded-xl border-0 bg-slate-100 text-slate-900" : ""}
+            >
+              取消
+            </AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={confirmBatchDelete} 
               className={`bg-destructive text-destructive-foreground hover:bg-destructive/90 ${isMobile ? "w-full h-11 text-base rounded-xl" : ""}`}
             >
               确认删除
