@@ -3,6 +3,7 @@ import { Search, Trash2, Plus, Pencil, AlertTriangle, Download, Clock, Database,
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
+import { Checkbox } from "@/components/ui/checkbox"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/simple-dialog"
 import { Header } from "@/components/layout/Header"
 import { Footer } from "@/components/layout/Footer"
@@ -37,6 +38,10 @@ function App() {
   // Delete Confirmation State
   const [isDeleteOpen, setIsDeleteOpen] = useState(false)
   const [deleteTargetId, setDeleteTargetId] = useState<number | null>(null)
+
+  // Batch Selection State
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
+  const [isBatchDeleteOpen, setIsBatchDeleteOpen] = useState(false)
 
   // Mobile Detection
   const [isMobile, setIsMobile] = useState(false)
@@ -126,8 +131,59 @@ function App() {
   const confirmDelete = () => {
     if (deleteTargetId !== null) {
       setRepos(repos.filter(r => r.id !== deleteTargetId))
+      setSelectedIds(prev => {
+        const next = new Set(prev)
+        next.delete(deleteTargetId)
+        return next
+      })
       setIsDeleteOpen(false)
       setDeleteTargetId(null)
+    }
+  }
+
+  // Batch Selection Handlers
+  const handleSelectOne = (id: number, checked: boolean) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev)
+      if (checked) {
+        next.add(id)
+      } else {
+        next.delete(id)
+      }
+      return next
+    })
+  }
+
+  const handleSelectAll = (checked: boolean) => {
+    if (checked) {
+      setSelectedIds(new Set(filteredRepos.map(r => r.id)))
+    } else {
+      setSelectedIds(new Set())
+    }
+  }
+
+  const handleBatchDeleteClick = () => {
+    if (selectedIds.size > 0) {
+      setIsBatchDeleteOpen(true)
+    }
+  }
+
+  const confirmBatchDelete = () => {
+    const newRepos = repos.filter(r => !selectedIds.has(r.id))
+    const newFilteredRepos = newRepos.filter(repo => 
+      repo.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+      repo.tag.toLowerCase().includes(searchTerm.toLowerCase())
+    )
+    const newTotalPages = Math.ceil(newFilteredRepos.length / itemsPerPage)
+    
+    setRepos(newRepos)
+    setSelectedIds(new Set())
+    setIsBatchDeleteOpen(false)
+    
+    if (!isMobile && newFilteredRepos.length > 0) {
+      const newCurrentPage = Math.min(currentPage, newTotalPages)
+      setCurrentPage(newCurrentPage)
+      setInputPage(newCurrentPage.toString())
     }
   }
 
@@ -213,37 +269,110 @@ function App() {
         </div>
 
         {/* Search and Add Button */}
-        <div className="mb-8 flex flex-col sm:flex-row gap-4 items-center justify-between bg-white/50 backdrop-blur-sm p-4 rounded-2xl border border-slate-200/60 shadow-sm">
-          <div className="relative w-full sm:max-w-md group">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground group-focus-within:text-primary transition-colors" />
-            <Input 
-              placeholder="搜索镜像名称或标签..." 
-              className="pl-9 w-full bg-white border-slate-200 focus-visible:ring-blue-500/30 transition-all shadow-sm"
-              value={searchTerm}
-              onChange={handleSearch}
-            />
+        <div className="mb-8 flex flex-col gap-4 bg-white/50 backdrop-blur-sm p-4 rounded-2xl border border-slate-200/60 shadow-sm">
+          <div className="flex flex-col sm:flex-row gap-4 items-center justify-between">
+            <div className="relative w-full sm:max-w-md group">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground group-focus-within:text-primary transition-colors" />
+              <Input 
+                placeholder="搜索镜像名称或标签..." 
+                className="pl-9 w-full bg-white border-slate-200 focus-visible:ring-blue-500/30 transition-all shadow-sm"
+                value={searchTerm}
+                onChange={handleSearch}
+              />
+            </div>
+            <div className="flex items-center gap-3 w-full sm:w-auto">
+              <Button 
+                onClick={handleBatchDeleteClick} 
+                disabled={selectedIds.size === 0}
+                variant="destructive"
+                className={`gap-2 w-full sm:w-auto shadow-md transition-all ${
+                  selectedIds.size === 0 
+                    ? "opacity-50 cursor-not-allowed" 
+                    : "hover:shadow-lg hover:shadow-destructive/20"
+                }`}
+              >
+                <Trash2 className="h-4 w-4" /> 批量删除
+              </Button>
+              <Button onClick={handleAddNew} className="gap-2 w-full sm:w-auto shadow-md hover:shadow-lg hover:shadow-primary/20 transition-all bg-gradient-to-r from-primary to-blue-600 border-0">
+                <Plus className="h-4 w-4" /> 新增镜像
+              </Button>
+            </div>
           </div>
-          <Button onClick={handleAddNew} className="gap-2 w-full sm:w-auto shadow-md hover:shadow-lg hover:shadow-primary/20 transition-all bg-gradient-to-r from-primary to-blue-600 border-0">
-            <Plus className="h-4 w-4" /> 新增镜像
-          </Button>
+          
+          {/* Selection Info Bar */}
+          {selectedIds.size > 0 && (
+            <div className="flex items-center justify-between px-2 py-2 bg-blue-50 rounded-lg border border-blue-200">
+              <div className="flex items-center gap-3">
+                <Checkbox 
+                  checked={
+                    selectedIds.size === filteredRepos.length && filteredRepos.length > 0 
+                      ? true 
+                      : selectedIds.size > 0 
+                        ? "indeterminate" 
+                        : false
+                  }
+                  onCheckedChange={handleSelectAll}
+                  className="border-blue-400"
+                />
+                <span className="text-sm text-blue-700 font-medium">
+                  已选择 <span className="text-blue-900 font-bold">{selectedIds.size}</span> / {filteredRepos.length} 项
+                </span>
+              </div>
+              <button 
+                onClick={() => setSelectedIds(new Set())}
+                className="text-sm text-blue-600 hover:text-blue-800 font-medium transition-colors"
+              >
+                取消选择
+              </button>
+            </div>
+          )}
+          
+          {/* Select All Bar (when nothing selected but there are items) */}
+          {selectedIds.size === 0 && filteredRepos.length > 0 && (
+            <div className="flex items-center gap-3 px-2 py-2 bg-slate-50 rounded-lg border border-slate-200">
+              <Checkbox 
+                checked={false}
+                onCheckedChange={handleSelectAll}
+              />
+              <span className="text-sm text-slate-600">
+                点击全选，或在卡片上勾选需要删除的镜像
+              </span>
+            </div>
+          )}
         </div>
 
         {/* Grid */}
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {displayRepos.map((repo) => (
-            <Card key={repo.id} className="group relative hover:shadow-[0_4px_20px_-4px_rgba(0,0,0,0.1)] transition-all duration-300 border-slate-200/60 hover:border-[#1677ff]/30 hover:-translate-y-1 overflow-hidden bg-white">
+            <Card key={repo.id} className={`group relative hover:shadow-[0_4px_20px_-4px_rgba(0,0,0,0.1)] transition-all duration-300 overflow-hidden bg-white ${
+              selectedIds.has(repo.id) 
+                ? 'border-[#1677ff] shadow-[0_4px_20px_-4px_rgba(22,119,255,0.2)]' 
+                : 'border-slate-200/60 hover:border-[#1677ff]/30 hover:-translate-y-1'
+            }`}>
               {/* Top accent line - thinner and cleaner like antd */}
-              <div className={`absolute top-0 left-0 w-full h-[2px] opacity-0 group-hover:opacity-100 transition-opacity bg-gradient-to-r ${getGradient(repo.name).replace('/20', '')}`} />
+              <div className={`absolute top-0 left-0 w-full h-[2px] transition-opacity bg-gradient-to-r ${
+                selectedIds.has(repo.id) ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+              } ${getGradient(repo.name).replace('/20', '')}`} />
+              
+              {/* Checkbox in top-left corner */}
+              <div className="absolute top-4 left-4 z-10">
+                <Checkbox 
+                  checked={selectedIds.has(repo.id)}
+                  onCheckedChange={(checked) => handleSelectOne(repo.id, checked)}
+                />
+              </div>
               
               <CardHeader className="p-6 pb-4">
                 <div className="flex justify-between items-start">
                   <div className="space-y-3 w-full">
                     <div className="flex items-start justify-between w-full">
-                      <CardTitle className="text-[18px] font-medium text-[#000000e0] flex items-center gap-3 group-hover:text-[#1677ff] transition-colors">
+                      <CardTitle className={`text-[18px] font-medium flex items-center gap-3 transition-colors ${
+                        selectedIds.has(repo.id) ? 'text-[#1677ff]' : 'text-[#000000e0] group-hover:text-[#1677ff]'
+                      }`}>
                         <div className={`p-2 rounded bg-slate-50 ${getIconColor(repo.name)}`}>
                           <Database className="h-5 w-5" />
                         </div>
-                        {repo.name}
+                        <span className="ml-6">{repo.name}</span>
                       </CardTitle>
                       
                       {/* Dynamic Badge - Antd Tag style */}
@@ -484,6 +613,34 @@ function App() {
               className={`bg-destructive text-destructive-foreground hover:bg-destructive/90 ${isMobile ? "w-full h-11 text-base rounded-xl" : ""}`}
             >
               确认删除
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Batch Delete Confirmation Dialog */}
+      <AlertDialog open={isBatchDeleteOpen} onOpenChange={setIsBatchDeleteOpen}>
+        <AlertDialogContent className={isMobile ? "rounded-2xl" : ""}>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-center text-xl">
+              确认批量删除
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-center text-base mt-2">
+              您确定要永久删除选中的 <span className="font-bold text-destructive">{selectedIds.size}</span> 个镜像吗？<br/>此操作无法撤销。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className={isMobile ? "gap-3" : ""}>
+            <AlertDialogCancel 
+              onClick={() => setIsBatchDeleteOpen(false)}
+              className={isMobile ? "w-full h-11 text-base rounded-xl border-0 bg-slate-100 text-slate-900" : ""}
+            >
+              取消
+            </AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={confirmBatchDelete} 
+              className={`bg-destructive text-destructive-foreground hover:bg-destructive/90 ${isMobile ? "w-full h-11 text-base rounded-xl" : ""}`}
+            >
+              确认删除 ({selectedIds.size})
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
